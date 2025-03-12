@@ -1,5 +1,4 @@
-﻿# app.py - Aplikasi Manajemen Keuangan dengan Streamlit dan LLM via Groq API
-
+#apps untuk telaah arus kas bulanan
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -10,10 +9,10 @@ import json
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]  # API Key Groq dari secrets
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Menggunakan model yang tersedia di Groq
-MODEL_NAME = "gemma2-9b-it"  # Model alternatif yang tersedia di Groq
+MODEL_NAME = "llama3-70b-8192"  # Model alternatif yang tersedia di Groq
 
 # Fungsi untuk mendapatkan respons dari model Groq
-def get_groq_response(prompt, max_tokens=1024):
+def get_groq_response(prompt, max_tokens=512):
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
@@ -46,7 +45,7 @@ if 'chat_history' not in st.session_state:
 if 'user_inputs_rp' not in st.session_state:
     st.session_state.user_inputs_rp = []
 if 'gaji' not in st.session_state:
-    st.session_state.gaji = 5000000
+    st.session_state.gaji = 0  # Perubahan 1: Default gaji menjadi 0
 if 'insentif' not in st.session_state:
     st.session_state.insentif = 0
 if 'persentase_dari_gaji' not in st.session_state:
@@ -108,6 +107,10 @@ kategori = [
     "Hidup Gaya"
 ]
 
+# Fungsi untuk memformat angka dengan titik sebagai pemisah ribuan
+def format_number(number):
+    return f"{number:,.0f}".replace(",", ".")
+
 def main():
     st.set_page_config(
         page_title="Aplikasi Manajemen Keuangan",
@@ -134,7 +137,7 @@ def main():
         gaji = st.number_input(
             "Besar Gaji per Bulan (Rp)",
             min_value=0,
-            value=st.session_state.gaji,
+            value=st.session_state.gaji,  # Perubahan 1: Default gaji menjadi 0
             step=100000,
             format="%d",
             key="gaji_input"
@@ -196,11 +199,8 @@ def main():
 
     # Inisialisasi user_inputs_rp jika belum ada
     if len(st.session_state.user_inputs_rp) != len(kategori):
-        # Hitung nilai default berdasarkan rentang
-        st.session_state.user_inputs_rp = []
-        for min_val, max_val in zip(rentang_min, rentang_max):
-            default_value = int(gaji * ((min_val + max_val) / 2) / 100)
-            st.session_state.user_inputs_rp.append(default_value)
+        # Perubahan 2: Default pengeluaran menjadi 0
+        st.session_state.user_inputs_rp = [0] * len(kategori)
 
     # Buat baris untuk setiap kategori
     user_inputs_rp = []
@@ -211,7 +211,7 @@ def main():
         cols[2].write(cont)
 
         # Input pengeluaran dalam Rupiah
-        default_value = st.session_state.user_inputs_rp[i] if i < len(st.session_state.user_inputs_rp) else int(gaji * ((rentang_min[i] + rentang_max[i]) / 2) / 100)
+        default_value = st.session_state.user_inputs_rp[i] if i < len(st.session_state.user_inputs_rp) else 0  # Perubahan 2: Default pengeluaran menjadi 0
         pengeluaran_rp = cols[3].number_input(
             f"Pengeluaran untuk {kat} (Rp)",
             min_value=0,
@@ -234,7 +234,7 @@ def main():
         else:
             persen_insentif = 0
 
-        st.write(f"Insentif/lembur sebesar Rp {insentif:,.0f} adalah {persen_insentif:.2f}% dari gaji bulanan.")
+        st.write(f"Insentif/lembur sebesar Rp {format_number(insentif)} adalah {persen_insentif:.2f}% dari gaji bulanan.")  # Perubahan 3: Format angka dengan titik
 
         # Hitung persentase dari gaji untuk setiap input
         persentase_dari_gaji = []
@@ -255,7 +255,7 @@ def main():
         ringkasan_df = pd.DataFrame({
             "No": range(1, len(kategori) + 1),
             "Item": kategori,
-            "Besar Pengeluaran (Rp)": [f"Rp {int(val):,}" for val in user_inputs_rp],
+            "Besar Pengeluaran (Rp)": [f"Rp {format_number(val)}" for val in user_inputs_rp],  # Perubahan 3: Format angka dengan titik
             "Rujukan (%)": rentang,
             "Hasil Simulasi (%)": [f"{val:.2f}%" for val in persentase_dari_gaji]
         })
@@ -268,15 +268,15 @@ def main():
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total Gaji", f"Rp {int(gaji):,}")
+            st.metric("Total Gaji", f"Rp {format_number(gaji)}")  # Perubahan 3: Format angka dengan titik
         with col2:
             # Modifikasi 1: Ubah warna panah berdasarkan apakah pengeluaran melebihi gaji
             delta_pengeluaran = total_pengeluaran - gaji
             delta_color = "inverse" if delta_pengeluaran > 0 else "normal"
             st.metric(
                 "Total Pengeluaran",
-                f"Rp {int(total_pengeluaran):,}",
-                f"Rp {int(delta_pengeluaran):,}",
+                f"Rp {format_number(total_pengeluaran)}",  # Perubahan 3: Format angka dengan titik
+                f"Rp {format_number(delta_pengeluaran)}",  # Perubahan 3: Format angka dengan titik
                 delta_color=delta_color
             )
         with col3:
@@ -292,7 +292,7 @@ def main():
 
         # Peringatan jika total pengeluaran melebihi gaji
         if total_pengeluaran > gaji:
-            st.warning(f"Total pengeluaran (Rp {int(total_pengeluaran):,}) melebihi gaji bulanan (Rp {int(gaji):,}). Pertimbangkan untuk mengurangi beberapa pengeluaran.")
+            st.warning(f"Total pengeluaran (Rp {format_number(total_pengeluaran)}) melebihi gaji bulanan (Rp {format_number(gaji)}). Pertimbangkan untuk mengurangi beberapa pengeluaran.")  # Perubahan 3: Format angka dengan titik
 
         # Analisis dan saran
         st.subheader("Analisis Keuangan")
@@ -310,15 +310,15 @@ def main():
         prompt = f"""
         Analisis keuangan berdasarkan data berikut:
 
-        Gaji bulanan: Rp {gaji:,.0f}
-        Insentif/lembur: Rp {insentif:,.0f} ({persen_insentif:.2f}% dari gaji)
-        Total pendapatan: Rp {(gaji + insentif):,.0f}
+        Gaji bulanan: Rp {format_number(gaji)}
+        Insentif/lembur: Rp {format_number(insentif)} ({persen_insentif:.2f}% dari gaji)
+        Total pendapatan: Rp {format_number(gaji + insentif)}
 
         Alokasi dana berdasarkan input pengguna:
         """
 
         for i, kategori_item in enumerate(kategori):
-            prompt += f"- {kategori_item}: Rp {int(user_inputs_rp[i]):,.0f} ({persentase_dari_gaji[i]:.2f}% dari gaji, rujukan: {rentang[i]})\n"
+            prompt += f"- {kategori_item}: Rp {format_number(user_inputs_rp[i])} ({persentase_dari_gaji[i]:.2f}% dari gaji, rujukan: {rentang[i]})\n"
 
         if items_melebihi:
             prompt += "\nItem yang melebihi rentang rujukan:\n"
@@ -331,7 +331,7 @@ def main():
                 prompt += f"- {item}: {persen:.2f}% (di bawah batas bawah {min_val}%)\n"
 
         if total_pengeluaran > gaji:
-            prompt += f"\nTotal pengeluaran (Rp {int(total_pengeluaran):,}) melebihi gaji bulanan (Rp {int(gaji):,}).\n"
+            prompt += f"\nTotal pengeluaran (Rp {format_number(total_pengeluaran)}) melebihi gaji bulanan (Rp {format_number(gaji)}).\n"
 
         prompt += """
         Berikan analisis singkat tentang alokasi keuangan ini dan saran untuk perbaikan.
@@ -368,7 +368,7 @@ def main():
         else:
             persen_insentif = 0
 
-        st.write(f"Insentif/lembur sebesar Rp {insentif:,.0f} adalah {persen_insentif:.2f}% dari gaji bulanan.")
+        st.write(f"Insentif/lembur sebesar Rp {format_number(insentif)} adalah {persen_insentif:.2f}% dari gaji bulanan.")  # Perubahan 3: Format angka dengan titik
 
         # Tampilkan ringkasan alokasi
         st.subheader("Ringkasan Alokasi Dana")
@@ -377,7 +377,7 @@ def main():
         ringkasan_df = pd.DataFrame({
             "No": range(1, len(kategori) + 1),
             "Item": kategori,
-            "Besar Pengeluaran (Rp)": [f"Rp {int(val):,}" for val in st.session_state.user_inputs_rp],
+            "Besar Pengeluaran (Rp)": [f"Rp {format_number(val)}" for val in st.session_state.user_inputs_rp],  # Perubahan 3: Format angka dengan titik
             "Rujukan (%)": rentang,
             "Hasil Simulasi (%)": [f"{val:.2f}%" for val in st.session_state.persentase_dari_gaji]
         })
@@ -390,15 +390,15 @@ def main():
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total Gaji", f"Rp {int(gaji):,}")
+            st.metric("Total Gaji", f"Rp {format_number(gaji)}")  # Perubahan 3: Format angka dengan titik
         with col2:
             # Modifikasi 1: Ubah warna panah berdasarkan apakah pengeluaran melebihi gaji
             delta_pengeluaran = total_pengeluaran - gaji
             delta_color = "inverse" if delta_pengeluaran > 0 else "normal"
             st.metric(
                 "Total Pengeluaran",
-                f"Rp {int(total_pengeluaran):,}",
-                f"Rp {int(delta_pengeluaran):,}",
+                f"Rp {format_number(total_pengeluaran)}",  # Perubahan 3: Format angka dengan titik
+                f"Rp {format_number(delta_pengeluaran)}",  # Perubahan 3: Format angka dengan titik
                 delta_color=delta_color
             )
         with col3:
@@ -414,7 +414,7 @@ def main():
 
         # Peringatan jika total pengeluaran melebihi gaji
         if total_pengeluaran > gaji:
-            st.warning(f"Total pengeluaran (Rp {int(total_pengeluaran):,}) melebihi gaji bulanan (Rp {int(gaji):,}). Pertimbangkan untuk mengurangi beberapa pengeluaran.")
+            st.warning(f"Total pengeluaran (Rp {format_number(total_pengeluaran)}) melebihi gaji bulanan (Rp {format_number(gaji)}). Pertimbangkan untuk mengurangi beberapa pengeluaran.")  # Perubahan 3: Format angka dengan titik
 
         # Analisis dan saran
         st.subheader("Analisis Keuangan")
@@ -449,16 +449,16 @@ def main():
 def generate_simple_analysis(gaji, insentif, persen_insentif, items_melebihi, items_dibawah, total_pengeluaran):
     """Fungsi untuk menghasilkan analisis sederhana jika API tidak tersedia"""
     analisis = f"""
-    Berdasarkan gaji bulanan Anda sebesar Rp {gaji:,.0f} dan insentif/lembur sebesar Rp {insentif:,.0f}, berikut adalah analisis keuangan Anda:
+    Berdasarkan gaji bulanan Anda sebesar Rp {format_number(gaji)} dan insentif/lembur sebesar Rp {format_number(insentif)}, berikut adalah analisis keuangan Anda:
 
-    1. Total pendapatan: Rp {(gaji + insentif):,.0f}
-    2. Total pengeluaran: Rp {int(total_pengeluaran):,.0f}
+    1. Total pendapatan: Rp {format_number(gaji + insentif)}
+    2. Total pengeluaran: Rp {format_number(total_pengeluaran)}
     """
 
     if total_pengeluaran > gaji:
-        analisis += f"\nTotal pengeluaran Anda melebihi gaji bulanan sebesar Rp {int(total_pengeluaran - gaji):,.0f}. Sebaiknya kurangi beberapa pengeluaran atau gunakan insentif/lembur untuk menutupi kekurangan.\n"
+        analisis += f"\nTotal pengeluaran Anda melebihi gaji bulanan sebesar Rp {format_number(total_pengeluaran - gaji)}. Sebaiknya kurangi beberapa pengeluaran atau gunakan insentif/lembur untuk menutupi kekurangan.\n"
     else:
-        analisis += f"\nAnda memiliki sisa gaji sebesar Rp {int(gaji - total_pengeluaran):,.0f} yang dapat dialokasikan untuk tabungan tambahan atau kebutuhan lain.\n"
+        analisis += f"\nAnda memiliki sisa gaji sebesar Rp {format_number(gaji - total_pengeluaran)} yang dapat dialokasikan untuk tabungan tambahan atau kebutuhan lain.\n"
 
     if items_melebihi:
         analisis += "\nItem yang melebihi rentang rujukan:\n"
