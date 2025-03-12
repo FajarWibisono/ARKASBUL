@@ -1,9 +1,10 @@
-#apps untuk telaah arus kas bulanan
+#apps untuk  telaah arus kas bulanan
 import streamlit as st
 import pandas as pd
 import numpy as np
 import requests
 import json
+import locale
 
 # Konfigurasi API Groq - Mengambil dari secrets
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]  # API Key Groq dari secrets
@@ -45,7 +46,7 @@ if 'chat_history' not in st.session_state:
 if 'user_inputs_rp' not in st.session_state:
     st.session_state.user_inputs_rp = []
 if 'gaji' not in st.session_state:
-    st.session_state.gaji = 0  # Perubahan 1: Default gaji menjadi 0
+    st.session_state.gaji = 0
 if 'insentif' not in st.session_state:
     st.session_state.insentif = 0
 if 'persentase_dari_gaji' not in st.session_state:
@@ -62,15 +63,15 @@ def process_chat_question():
         chat_prompt = f"""
         Berdasarkan data keuangan berikut:
 
-        Gaji bulanan: Rp {st.session_state.gaji:,.0f}
-        Insentif/lembur: Rp {st.session_state.insentif:,.0f}
+        Gaji bulanan: Rp {format_number(st.session_state.gaji)}
+        Insentif/lembur: Rp {format_number(st.session_state.insentif)}
 
         Alokasi dana pengguna:
         """
 
         for i, kategori_item in enumerate(kategori):
             if i < len(st.session_state.persentase_dari_gaji) and i < len(st.session_state.user_inputs_rp):
-                chat_prompt += f"- {kategori_item}: {st.session_state.persentase_dari_gaji[i]:.2f}% (Rp {int(st.session_state.user_inputs_rp[i]):,.0f})\n"
+                chat_prompt += f"- {kategori_item}: {st.session_state.persentase_dari_gaji[i]:.2f}% (Rp {format_number(st.session_state.user_inputs_rp[i])})\n"
 
         chat_prompt += f"""
         Pertanyaan pengguna: {user_question}
@@ -131,36 +132,60 @@ def main():
         alokasi dana berdasarkan persentase yang disarankan.
         """)
 
-    # Input gaji dan insentif (tanpa tombol + dan -)
+    # CSS untuk memformat input angka dengan pemisah ribuan
+    st.markdown("""
+    <style>
+    /* Menyembunyikan tombol + dan - */
+    [data-testid="stNumberInput"] button {
+        display: none;
+    }
+
+    /* Mengubah tampilan input number agar terlihat seperti teks dengan pemisah ribuan */
+    input[type="number"] {
+        text-align: right;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Input gaji dan insentif dengan format angka
     col1, col2 = st.columns(2)
     with col1:
-        gaji = st.number_input(
-            "Besar Gaji per Bulan (Rp)",
-            min_value=0,
-            value=st.session_state.gaji,  # Perubahan 1: Default gaji menjadi 0
-            step=100000,
-            format="%d",
-            key="gaji_input"
+        # Tampilkan label dan field input terpisah
+        st.markdown("**Besar Gaji per Bulan (Rp)**")
+        # Gunakan text_input untuk menampilkan angka terformat
+        gaji_str = st.text_input(
+            "Gaji",
+            value=format_number(st.session_state.gaji) if st.session_state.gaji > 0 else "0",
+            label_visibility="collapsed",
+            key="gaji_input_str"
         )
-        st.session_state.gaji = gaji
-        # Tambahkan CSS untuk menyembunyikan tombol + dan -
-        st.markdown("""
-        <style>
-        [data-testid="stNumberInput"] button {
-            display: none;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+
+        # Konversi input string ke angka (hapus titik pemisah ribuan)
+        try:
+            gaji = int(gaji_str.replace(".", ""))
+            st.session_state.gaji = gaji
+        except ValueError:
+            st.error("Masukkan angka yang valid untuk gaji")
+            gaji = st.session_state.gaji
+
     with col2:
-        insentif = st.number_input(
-            "Insentif/Lembur Rata-rata (Rp)",
-            min_value=0,
-            value=st.session_state.insentif,
-            step=100000,
-            format="%d",
-            key="insentif_input"
+        # Tampilkan label dan field input terpisah
+        st.markdown("**Insentif/Lembur Rata-rata (Rp)**")
+        # Gunakan text_input untuk menampilkan angka terformat
+        insentif_str = st.text_input(
+            "Insentif",
+            value=format_number(st.session_state.insentif) if st.session_state.insentif > 0 else "0",
+            label_visibility="collapsed",
+            key="insentif_input_str"
         )
-        st.session_state.insentif = insentif
+
+        # Konversi input string ke angka (hapus titik pemisah ribuan)
+        try:
+            insentif = int(insentif_str.replace(".", ""))
+            st.session_state.insentif = insentif
+        except ValueError:
+            st.error("Masukkan angka yang valid untuk insentif")
+            insentif = st.session_state.insentif
 
     # Definisi contoh untuk setiap kategori
     contoh = [
@@ -199,7 +224,6 @@ def main():
 
     # Inisialisasi user_inputs_rp jika belum ada
     if len(st.session_state.user_inputs_rp) != len(kategori):
-        # Perubahan 2: Default pengeluaran menjadi 0
         st.session_state.user_inputs_rp = [0] * len(kategori)
 
     # Buat baris untuk setiap kategori
@@ -210,17 +234,22 @@ def main():
         cols[1].write(kat)
         cols[2].write(cont)
 
-        # Input pengeluaran dalam Rupiah
-        default_value = st.session_state.user_inputs_rp[i] if i < len(st.session_state.user_inputs_rp) else 0  # Perubahan 2: Default pengeluaran menjadi 0
-        pengeluaran_rp = cols[3].number_input(
+        # Tampilkan input pengeluaran dengan format angka
+        default_value = st.session_state.user_inputs_rp[i] if i < len(st.session_state.user_inputs_rp) else 0
+        pengeluaran_str = cols[3].text_input(
             f"Pengeluaran untuk {kat} (Rp)",
-            min_value=0,
-            value=default_value,
-            step=10000,
-            format="%d",
-            key=f"input_rp_{i}",
+            value=format_number(default_value) if default_value > 0 else "0",
+            key=f"input_rp_str_{i}",
             label_visibility="collapsed"
         )
+
+        # Konversi input string ke angka (hapus titik pemisah ribuan)
+        try:
+            pengeluaran_rp = int(pengeluaran_str.replace(".", ""))
+        except ValueError:
+            st.error(f"Masukkan angka yang valid untuk {kat}")
+            pengeluaran_rp = default_value
+
         user_inputs_rp.append(pengeluaran_rp)
 
     # Tombol analisa
@@ -234,7 +263,7 @@ def main():
         else:
             persen_insentif = 0
 
-        st.write(f"Insentif/lembur sebesar Rp {format_number(insentif)} adalah {persen_insentif:.2f}% dari gaji bulanan.")  # Perubahan 3: Format angka dengan titik
+        st.write(f"Insentif/lembur sebesar Rp {format_number(insentif)} adalah {persen_insentif:.2f}% dari gaji bulanan.")
 
         # Hitung persentase dari gaji untuk setiap input
         persentase_dari_gaji = []
@@ -255,7 +284,7 @@ def main():
         ringkasan_df = pd.DataFrame({
             "No": range(1, len(kategori) + 1),
             "Item": kategori,
-            "Besar Pengeluaran (Rp)": [f"Rp {format_number(val)}" for val in user_inputs_rp],  # Perubahan 3: Format angka dengan titik
+            "Besar Pengeluaran (Rp)": [f"Rp {format_number(val)}" for val in user_inputs_rp],
             "Rujukan (%)": rentang,
             "Hasil Simulasi (%)": [f"{val:.2f}%" for val in persentase_dari_gaji]
         })
@@ -268,15 +297,15 @@ def main():
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total Gaji", f"Rp {format_number(gaji)}")  # Perubahan 3: Format angka dengan titik
+            st.metric("Total Gaji", f"Rp {format_number(gaji)}")
         with col2:
             # Modifikasi 1: Ubah warna panah berdasarkan apakah pengeluaran melebihi gaji
             delta_pengeluaran = total_pengeluaran - gaji
             delta_color = "inverse" if delta_pengeluaran > 0 else "normal"
             st.metric(
                 "Total Pengeluaran",
-                f"Rp {format_number(total_pengeluaran)}",  # Perubahan 3: Format angka dengan titik
-                f"Rp {format_number(delta_pengeluaran)}",  # Perubahan 3: Format angka dengan titik
+                f"Rp {format_number(total_pengeluaran)}",
+                f"Rp {format_number(delta_pengeluaran)}",
                 delta_color=delta_color
             )
         with col3:
@@ -292,7 +321,7 @@ def main():
 
         # Peringatan jika total pengeluaran melebihi gaji
         if total_pengeluaran > gaji:
-            st.warning(f"Total pengeluaran (Rp {format_number(total_pengeluaran)}) melebihi gaji bulanan (Rp {format_number(gaji)}). Pertimbangkan untuk mengurangi beberapa pengeluaran.")  # Perubahan 3: Format angka dengan titik
+            st.warning(f"Total pengeluaran (Rp {format_number(total_pengeluaran)}) melebihi gaji bulanan (Rp {format_number(gaji)}). Pertimbangkan untuk mengurangi beberapa pengeluaran.")
 
         # Analisis dan saran
         st.subheader("Analisis Keuangan")
@@ -368,7 +397,7 @@ def main():
         else:
             persen_insentif = 0
 
-        st.write(f"Insentif/lembur sebesar Rp {format_number(insentif)} adalah {persen_insentif:.2f}% dari gaji bulanan.")  # Perubahan 3: Format angka dengan titik
+        st.write(f"Insentif/lembur sebesar Rp {format_number(insentif)} adalah {persen_insentif:.2f}% dari gaji bulanan.")
 
         # Tampilkan ringkasan alokasi
         st.subheader("Ringkasan Alokasi Dana")
@@ -377,7 +406,7 @@ def main():
         ringkasan_df = pd.DataFrame({
             "No": range(1, len(kategori) + 1),
             "Item": kategori,
-            "Besar Pengeluaran (Rp)": [f"Rp {format_number(val)}" for val in st.session_state.user_inputs_rp],  # Perubahan 3: Format angka dengan titik
+            "Besar Pengeluaran (Rp)": [f"Rp {format_number(val)}" for val in st.session_state.user_inputs_rp],
             "Rujukan (%)": rentang,
             "Hasil Simulasi (%)": [f"{val:.2f}%" for val in st.session_state.persentase_dari_gaji]
         })
@@ -390,15 +419,15 @@ def main():
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total Gaji", f"Rp {format_number(gaji)}")  # Perubahan 3: Format angka dengan titik
+            st.metric("Total Gaji", f"Rp {format_number(gaji)}")
         with col2:
             # Modifikasi 1: Ubah warna panah berdasarkan apakah pengeluaran melebihi gaji
             delta_pengeluaran = total_pengeluaran - gaji
             delta_color = "inverse" if delta_pengeluaran > 0 else "normal"
             st.metric(
                 "Total Pengeluaran",
-                f"Rp {format_number(total_pengeluaran)}",  # Perubahan 3: Format angka dengan titik
-                f"Rp {format_number(delta_pengeluaran)}",  # Perubahan 3: Format angka dengan titik
+                f"Rp {format_number(total_pengeluaran)}",
+                f"Rp {format_number(delta_pengeluaran)}",
                 delta_color=delta_color
             )
         with col3:
@@ -414,7 +443,7 @@ def main():
 
         # Peringatan jika total pengeluaran melebihi gaji
         if total_pengeluaran > gaji:
-            st.warning(f"Total pengeluaran (Rp {format_number(total_pengeluaran)}) melebihi gaji bulanan (Rp {format_number(gaji)}). Pertimbangkan untuk mengurangi beberapa pengeluaran.")  # Perubahan 3: Format angka dengan titik
+            st.warning(f"Total pengeluaran (Rp {format_number(total_pengeluaran)}) melebihi gaji bulanan (Rp {format_number(gaji)}). Pertimbangkan untuk mengurangi beberapa pengeluaran.")
 
         # Analisis dan saran
         st.subheader("Analisis Keuangan")
