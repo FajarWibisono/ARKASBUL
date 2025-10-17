@@ -9,7 +9,7 @@ import json
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]  # API Key Groq dari secrets
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Menggunakan model yang tersedia di Groq
-MODEL_NAME = "gemma2-9b-it"  
+MODEL_NAME = "moonshotai/kimi-k2-instruct"  
 # Fungsi untuk mendapatkan respons dari model Groq
 def get_groq_response(prompt, max_tokens=512):
     headers = {
@@ -483,3 +483,4 @@ def generate_simple_analysis(gaji, insentif, persen_insentif, items_melebihi, it
 
 if __name__ == "__main__":
     main()
+
